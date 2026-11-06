@@ -36,6 +36,8 @@ import type { AppSettings, Prefs } from '../types/settings';
 import type { WheelConfig } from '../types/wheel';
 import { debounce, deepClone, uid } from '../utils/misc';
 
+import { decompressWheelFromShare } from '../services/shareService';
+
 export type PageRoute = 'wheel' | 'settings' | 'presets';
 
 export interface SpinHistoryItem {
@@ -127,7 +129,29 @@ export function useAppStore() {
         for (const w of list) await saveWheel(w);
       }
 
+      // Check if opened via a share link (#/share?wheel=...)
+      let sharedWheel: WheelConfig | null = null;
+      if (window.location.hash.includes('share?wheel=')) {
+        try {
+          const match = window.location.hash.match(/wheel=([^&]+)/);
+          if (match && match[1]) {
+            sharedWheel = await decompressWheelFromShare(decodeURIComponent(match[1]));
+            if (sharedWheel) {
+              await saveWheel(sharedWheel);
+              list = [sharedWheel, ...list];
+              loadedPrefs.lastWheelId = sharedWheel.id;
+              savePrefs(loadedPrefs);
+              // Clean up the hash to clean URL
+              window.location.hash = '#/';
+            }
+          }
+        } catch {
+          // invalid share URL, proceed normally
+        }
+      }
+
       const initialWheel =
+        sharedWheel ??
         list.find((w) => w.id === loadedPrefs.lastWheelId) ?? list[0];
 
       if (!mounted) return;
@@ -135,7 +159,11 @@ export function useAppStore() {
       setAppSettingsState(loadedSettings);
       setWheels(list);
       setActiveId(initialWheel.id);
-      if (savedDraft && list.some((w) => w.id === savedDraft.id)) {
+      if (sharedWheel) {
+        setDraftState(deepClone(sharedWheel));
+        setIsDirty(false);
+        showToast(`Loaded shared wheel: "${sharedWheel.name}"!`);
+      } else if (savedDraft && list.some((w) => w.id === savedDraft.id)) {
         setDraftState(savedDraft);
         setIsDirty(true);
       } else {

@@ -7,6 +7,7 @@ import {
   FolderKanban,
   Save,
   ArrowLeft,
+  Share2,
   Sparkles,
 } from 'lucide-react';
 import { Celebration, type CelebrationBurst } from '../../components/Celebration/Celebration';
@@ -20,6 +21,7 @@ import { useWheelAnimation } from '../../hooks/useWheelAnimation';
 import { sound } from '../../services/soundEngine';
 import { getTheme } from '../../services/themes';
 import { computeArcs, eligibleArcs, type SegmentArc } from '../../services/wheelEngine';
+import { generateShareLink } from '../../services/shareService';
 import type { Segment } from '../../types/segment';
 import { isTypingTarget } from '../../utils/misc';
 
@@ -40,6 +42,26 @@ export const Home: React.FC<HomeProps> = ({
   const [popupWinner, setPopupWinner] = useState<Segment | null>(null);
   const [lastSelected, setLastSelected] = useState<Segment | null>(null);
   const [burst, setBurst] = useState<CelebrationBurst | null>(null);
+
+  const handleShareCurrentWheel = async () => {
+    if (!wheel) return;
+    try {
+      const link = await generateShareLink(wheel);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      store.showToast('Share link copied to clipboard!');
+    } catch {
+      store.showToast('Could not generate share link.');
+    }
+  };
 
   const arcs = useMemo(
     () => (wheel ? computeArcs(wheel.segments, wheel.design.sizeByWeight) : []),
@@ -272,6 +294,16 @@ export const Home: React.FC<HomeProps> = ({
 
           {!isFullScreen && (
             <>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => void handleShareCurrentWheel()}
+                title="Share this wheel via link to another device"
+                aria-label="Share wheel"
+              >
+                <Share2 size={20} />
+                <span className="icon-btn__label">Share</span>
+              </button>
               <button
                 type="button"
                 className="icon-btn"

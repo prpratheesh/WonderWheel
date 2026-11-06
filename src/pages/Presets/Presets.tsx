@@ -6,12 +6,14 @@ import {
   Edit3,
   FolderOpen,
   Plus,
+  Share2,
   Trash2,
   Upload,
 } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog/ConfirmDialog';
 import { TEMPLATES } from '../../services/defaults';
 import { buildExport, downloadJson, importFile, safeFileName } from '../../services/exportImport';
+import { generateShareLink } from '../../services/shareService';
 import { getTheme } from '../../services/themes';
 import type { WheelConfig } from '../../types/wheel';
 
@@ -46,7 +48,29 @@ export const Presets: React.FC<PresetsProps> = ({
   const [replaceOnImport, setReplaceOnImport] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const handleShareLink = async (wheel: WheelConfig) => {
+    try {
+      const link = await generateShareLink(wheel);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        // Fallback for older browsers
+        const input = document.createElement('textarea');
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      }
+      setCopiedId(wheel.id);
+      setTimeout(() => setCopiedId(null), 3000);
+    } catch {
+      setError('Could not copy share link to clipboard.');
+    }
+  };
 
   const handleExportOne = async (wheel: WheelConfig) => {
     setBusy(true);
@@ -221,6 +245,15 @@ export const Presets: React.FC<PresetsProps> = ({
                 >
                   <FolderOpen size={15} />
                   <span>{isActive ? 'Loaded' : 'Load Wheel'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`icon-action ${copiedId === w.id ? 'is-copied' : ''}`}
+                  onClick={() => void handleShareLink(w)}
+                  title={copiedId === w.id ? 'Share link copied!' : 'Copy Shareable Link for another device'}
+                  aria-label="Share wheel via link"
+                >
+                  {copiedId === w.id ? <Check size={16} color="#10b981" /> : <Share2 size={16} />}
                 </button>
                 <button
                   type="button"
