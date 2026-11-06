@@ -106,3 +106,4 @@ The repository includes a ready-to-run GitHub Actions workflow in `.github/workf
 ## 6. License
 
 MIT License. Built for teachers, educators, and students.
+

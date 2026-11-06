@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createWheel,
   normalizeWheel,
   normalizeSegment,
   defaultSegment,
@@ -60,3 +59,4 @@ describe('defaults and normalisation', () => {
     expect(contrastText('#1e1b4b')).toBe('#ffffff'); // White text on dark navy
   });
 });
+

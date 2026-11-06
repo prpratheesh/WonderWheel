@@ -5,8 +5,6 @@ import {
   localAngleUnderPointer,
   pointerAngle,
   planAutoSpin,
-  mod,
-  buildPlan,
   makeCurve,
   easingParams,
 } from '../src/services/wheelEngine';
@@ -122,3 +120,4 @@ describe('wheelEngine', () => {
     }
   });
 });
+

@@ -73,6 +73,45 @@ function wedge(ctx: CanvasRenderingContext2D, r: number, arc: SegmentArc) {
   ctx.closePath();
 }
 
+function drawSegmentFullBackground(
+  ctx: CanvasRenderingContext2D,
+  arc: SegmentArc,
+  m: WheelMetrics,
+  img: CachedImage,
+) {
+  if (!img.width || !img.height) return;
+  ctx.save();
+  wedge(ctx, m.r, arc);
+  ctx.clip();
+
+  const mid = toCanvas((arc.start + arc.end) / 2);
+  ctx.rotate(mid);
+
+  // Position image centered along the main radius span of the segment
+  const rCenter = (m.r + m.hubR) / 2;
+  ctx.translate(rCenter, 0);
+  ctx.rotate(Math.PI / 2); // Orient so image top points towards wheel rim
+
+  const spanRad = (arc.end - arc.start) * DEG;
+  const chord = 2 * m.r * Math.sin(spanRad / 2);
+  const radialDepth = m.r - m.hubR;
+  // Compute minimum bounding box to completely cover the slice portion
+  const reqW = Math.max(chord, radialDepth * Math.tan(spanRad / 2) * 2) * 1.08;
+  const reqH = radialDepth * 1.15;
+
+  const scale = Math.max(reqW / img.width, reqH / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+
+  ctx.drawImage(img.source, -dw / 2, -dh / 2, dw, dh);
+
+  // Semi-transparent overlay to ensure text on top is always readable
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+  ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+
+  ctx.restore();
+}
+
 export function renderWheel(canvas: HTMLCanvasElement, o: RenderOptions): void {
   const ctx = prepareCanvas(canvas, o.size, o.dpr);
   if (!ctx) return;
@@ -110,6 +149,12 @@ export function renderWheel(canvas: HTMLCanvasElement, o: RenderOptions): void {
     wedge(ctx, m.r, arc);
     ctx.fillStyle = g;
     ctx.fill();
+
+    // If segment uses imageFillText, paint full image covering the slice
+    if (arc.segment.layout === 'imageFillText' && arc.segment.imageId) {
+      const img = o.getImage(arc.segment.imageId);
+      if (img) drawSegmentFullBackground(ctx, arc, m, img);
+    }
   }
 
   // 3. Content (text / images), each clipped to its own wedge — never overflows.
@@ -464,6 +509,7 @@ function drawUpright(c: Ctx2, layout: Segment['layout'], img: CachedImage | unde
       break;
     }
     case 'text':
+    case 'imageFillText':
     default:
       text(a, b, seg.textAlign);
   }
@@ -562,6 +608,7 @@ function drawRadial(c: Ctx2, layout: Segment['layout'], img: CachedImage | undef
       break;
     }
     case 'text':
+    case 'imageFillText':
     default:
       drawRadialText(c, a, b, baseFs, seg.textAlign);
   }

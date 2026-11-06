@@ -172,6 +172,13 @@ export const SegmentEditor: React.FC<SegmentEditorProps> = ({
           <div className="toolbar-row">
             <button
               type="button"
+              className="btn btn--sm btn--primary"
+              onClick={() => applyImageLayoutAll('imageFillText', 'cover')}
+            >
+              All: Full Segment Image (Text on top)
+            </button>
+            <button
+              type="button"
               className="btn btn--sm btn--secondary"
               onClick={() => applyImageLayoutAll('imageAbove', 'contain')}
             >

@@ -1,6 +1,6 @@
 /** A single partition of the wheel. Every field is independently configurable. */
 
-export type SegmentLayout = 'text' | 'image' | 'imageAbove' | 'imageBelow' | 'imageBeside' | 'icon';
+export type SegmentLayout = 'text' | 'image' | 'imageAbove' | 'imageBelow' | 'imageBeside' | 'icon' | 'imageFillText';
 export type ImageFit = 'contain' | 'cover';
 /** Radial position of an image inside its segment (used by the "Image only" layout). */
 export type ImagePosition = 'inner' | 'center' | 'outer';
@@ -36,6 +36,7 @@ export interface Segment {
 export const SEGMENT_LAYOUT_LABELS: Record<SegmentLayout, string> = {
   text: 'Text only',
   image: 'Image only',
+  imageFillText: 'Full Segment Image (Text on top)',
   imageAbove: 'Image above text',
   imageBelow: 'Image below text',
   imageBeside: 'Image beside text',
