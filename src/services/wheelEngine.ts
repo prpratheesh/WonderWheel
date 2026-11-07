@@ -38,8 +38,14 @@ export function pointerAngle(pos: PointerPosition): number {
 }
 
 /** Visible segments laid out around the wheel. */
-export function computeArcs(segments: readonly Segment[], sizeByWeight: boolean): SegmentArc[] {
-  const visible = segments.filter((s) => s.visible);
+export function computeArcs(
+  segments: readonly Segment[],
+  sizeByWeight: boolean,
+  hiddenIds?: ReadonlySet<string>,
+): SegmentArc[] {
+  const visible = segments.filter(
+    (s) => s.visible && (!hiddenIds || !hiddenIds.has(s.id)),
+  );
   if (visible.length === 0) return [];
   const sizeOf = (s: Segment) => (sizeByWeight ? (s.weight > 0 ? s.weight : 0.2) : 1);
   const total = visible.reduce((acc, s) => acc + sizeOf(s), 0);

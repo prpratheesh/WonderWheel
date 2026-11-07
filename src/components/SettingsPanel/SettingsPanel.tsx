@@ -497,17 +497,48 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <label className="toggle-row">
                   <input
                     type="checkbox"
-                    checked={wheel.result.removeWinner}
-                    onChange={(e) =>
+                    checked={wheel.result.removeWinner || wheel.result.hideSelected}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
                       onChange((prev) => ({
                         ...prev,
-                        result: { ...prev.result, removeWinner: e.target.checked },
-                      }))
-                    }
+                        result: {
+                          ...prev.result,
+                          removeWinner: checked,
+                          hideSelected: checked ? prev.result.hideSelected : false,
+                        },
+                      }));
+                    }}
                   />
                   <div>
-                    <strong>Auto-Exclude Selected Winner After Each Spin</strong>
-                    <span>Avoid picking the same student twice in one round</span>
+                    <strong>Do Not Repeat Answers in Current Session</strong>
+                    <span>
+                      Winners will not repeat until every option has occurred once (resets for the next session)
+                    </span>
+                  </div>
+                </label>
+
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={wheel.result.hideSelected}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      onChange((prev) => ({
+                        ...prev,
+                        result: {
+                          ...prev.result,
+                          hideSelected: checked,
+                          removeWinner: checked ? true : prev.result.removeWinner,
+                        },
+                      }));
+                    }}
+                  />
+                  <div>
+                    <strong>Completely Hide Selected Option Once Selected</strong>
+                    <span>
+                      Completely remove the selected slice from the wheel once picked until the session finishes
+                    </span>
                   </div>
                 </label>
               </div>

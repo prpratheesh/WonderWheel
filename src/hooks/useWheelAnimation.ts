@@ -61,6 +61,11 @@ export function useWheelAnimation({
   const lastArcIdxRef = useRef<number>(-1);
   const manualSpeedRef = useRef<number>(0);
   const chosenArcRef = useRef<SegmentArc | null>(null);
+  const activeArcsRef = useRef<readonly SegmentArc[]>(arcs);
+
+  useEffect(() => {
+    if (phase === 'idle') activeArcsRef.current = arcs;
+  }, [arcs, phase]);
 
   const pDeg = pointerAngle(pointerPosition);
 
@@ -90,8 +95,9 @@ export function useWheelAnimation({
 
   const updateTickAndLabel = useCallback(
     (rot: number, dir: 'cw' | 'ccw') => {
-      if (arcs.length === 0) return;
-      const idx = arcIndexUnderPointer(arcs, rot, pDeg);
+      const currentArcs = activeArcsRef.current;
+      if (currentArcs.length === 0) return;
+      const idx = arcIndexUnderPointer(currentArcs, rot, pDeg);
       if (idx !== lastArcIdxRef.current) {
         if (lastArcIdxRef.current !== -1) {
           sound.tick();
@@ -100,14 +106,14 @@ export function useWheelAnimation({
         lastArcIdxRef.current = idx;
         if (liveLabelRef.current) {
           if (showLiveLabel && !hideUntilStop) {
-            liveLabelRef.current.textContent = arcs[idx]?.segment.title || '…';
+            liveLabelRef.current.textContent = currentArcs[idx]?.segment.title || '…';
           } else if (hideUntilStop) {
             liveLabelRef.current.textContent = 'Spinning…';
           }
         }
       }
     },
-    [arcs, pDeg, showLiveLabel, hideUntilStop, triggerPointerKick],
+    [pDeg, showLiveLabel, hideUntilStop, triggerPointerKick],
   );
 
   const cancelFrame = useCallback(() => {
@@ -191,65 +197,74 @@ export function useWheelAnimation({
     [applyRotation, cancelFrame, onSlowDeviceDetected, onWin, updateTickAndLabel],
   );
 
-  const startSpin = useCallback(() => {
-    if (phase !== 'idle') return false;
-    const pool = eligibleArcs(arcs, excludedIds);
-    if (pool.length === 0) return false;
+  const startSpin = useCallback(
+    (
+      overrideArcs?: readonly SegmentArc[],
+      overrideExcludedIds?: ReadonlySet<string>,
+    ) => {
+      if (phase !== 'idle') return false;
+      const spinArcs = overrideArcs ?? arcs;
+      const spinExcluded = overrideExcludedIds ?? excludedIds;
+      const pool = eligibleArcs(spinArcs, spinExcluded);
+      if (pool.length === 0) return false;
 
-    sound.unlock();
-    sound.click();
-    setWinningArc(null);
+      activeArcsRef.current = spinArcs;
+      sound.unlock();
+      sound.click();
+      setWinningArc(null);
 
-    // Pre-select the winning segment BEFORE the animation starts using fair weighted selection.
-    const picked = pickWeighted(pool, (a) => a.segment.weight);
-    if (!picked) return false;
-    chosenArcRef.current = picked;
+      // Pre-select the winning segment BEFORE the animation starts using fair weighted selection.
+      const picked = pickWeighted(pool, (a) => a.segment.weight);
+      if (!picked) return false;
+      chosenArcRef.current = picked;
 
-    lastArcIdxRef.current = arcIndexUnderPointer(arcs, rotationRef.current, pDeg);
+      lastArcIdxRef.current = arcIndexUnderPointer(spinArcs, rotationRef.current, pDeg);
 
-    if (animation.spinMode === 'manual' && !reducedMotion) {
-      setPhase('freeSpin');
-      const dir = animation.direction;
-      const sign = dir === 'cw' ? 1 : -1;
-      const targetSpeed = 820; // deg/s
-      manualSpeedRef.current = 120;
-      let prev = performance.now();
-      sound.startSpin();
+      if (animation.spinMode === 'manual' && !reducedMotion) {
+        setPhase('freeSpin');
+        const dir = animation.direction;
+        const sign = dir === 'cw' ? 1 : -1;
+        const targetSpeed = 820; // deg/s
+        manualSpeedRef.current = 120;
+        let prev = performance.now();
+        sound.startSpin();
 
-      const loop = (now: number) => {
-        const dt = Math.min(0.05, (now - prev) / 1000);
-        prev = now;
-        manualSpeedRef.current += (targetSpeed - manualSpeedRef.current) * Math.min(1, dt * 6);
-        const rot = rotationRef.current + sign * manualSpeedRef.current * dt;
-        applyRotation(rot);
-        updateTickAndLabel(rot, dir);
-        sound.setSpinSpeed(Math.min(1, manualSpeedRef.current / 900));
+        const loop = (now: number) => {
+          const dt = Math.min(0.05, (now - prev) / 1000);
+          prev = now;
+          manualSpeedRef.current += (targetSpeed - manualSpeedRef.current) * Math.min(1, dt * 6);
+          const rot = rotationRef.current + sign * manualSpeedRef.current * dt;
+          applyRotation(rot);
+          updateTickAndLabel(rot, dir);
+          sound.setSpinSpeed(Math.min(1, manualSpeedRef.current / 900));
+          rafRef.current = requestAnimationFrame(loop);
+        };
         rafRef.current = requestAnimationFrame(loop);
-      };
-      rafRef.current = requestAnimationFrame(loop);
+        return true;
+      }
+
+      setPhase('spinning');
+      const effDuration = reducedMotion ? Math.min(1.4, animation.duration) : animation.duration;
+      const effRevs = reducedMotion ? Math.min(2, animation.revolutions) : animation.revolutions;
+
+      const plan = planAutoSpin({
+        arcs: spinArcs,
+        targetIndex: picked.index,
+        from: rotationRef.current,
+        pointerDeg: pDeg,
+        anim: {
+          ...animation,
+          duration: effDuration,
+          revolutions: effRevs,
+        },
+        rand: secureRandom(),
+      });
+
+      runPlan(plan, picked, animation.direction);
       return true;
-    }
-
-    setPhase('spinning');
-    const effDuration = reducedMotion ? Math.min(1.4, animation.duration) : animation.duration;
-    const effRevs = reducedMotion ? Math.min(2, animation.revolutions) : animation.revolutions;
-
-    const plan = planAutoSpin({
-      arcs,
-      targetIndex: picked.index,
-      from: rotationRef.current,
-      pointerDeg: pDeg,
-      anim: {
-        ...animation,
-        duration: effDuration,
-        revolutions: effRevs,
-      },
-      rand: secureRandom(),
-    });
-
-    runPlan(plan, picked, animation.direction);
-    return true;
-  }, [animation, arcs, excludedIds, pDeg, phase, reducedMotion, runPlan, applyRotation, updateTickAndLabel]);
+    },
+    [animation, arcs, excludedIds, pDeg, phase, reducedMotion, runPlan, applyRotation, updateTickAndLabel],
+  );
 
   const stopManualSpin = useCallback(() => {
     if (phase !== 'freeSpin') return;
@@ -259,7 +274,7 @@ export function useWheelAnimation({
     setPhase('stopping');
     const curve = easingParams(animation.easing, animation);
     const plan = planManualStop({
-      arcs,
+      arcs: activeArcsRef.current,
       targetIndex: target.index,
       from: rotationRef.current,
       speed: manualSpeedRef.current || 720,
@@ -270,7 +285,7 @@ export function useWheelAnimation({
       rand: secureRandom(),
     });
     runPlan(plan, target, animation.direction);
-  }, [animation, arcs, pDeg, phase, runPlan]);
+  }, [animation, pDeg, phase, runPlan]);
 
   const clearWinner = useCallback(() => setWinningArc(null), []);
 

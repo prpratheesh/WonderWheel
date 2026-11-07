@@ -7,7 +7,9 @@ import {
   planAutoSpin,
   makeCurve,
   easingParams,
+  eligibleArcs,
 } from '../src/services/wheelEngine';
+import { pickWeighted } from '../src/services/randomSelection';
 import { defaultSegment, defaultAnimation } from '../src/services/defaults';
 import type { Segment } from '../src/types/segment';
 
@@ -118,6 +120,40 @@ describe('wheelEngine', () => {
       expect(val).toBeGreaterThanOrEqual(prev);
       prev = val;
     }
+  });
+
+  it('never repeats an option within the same session and restores all options in session 2', () => {
+    const segs = ['1', '2', '3', '4', '5'].map((id) => makeSeg(id));
+    const fullArcs = computeArcs(segs, false);
+    const excluded = new Set<string>();
+    const session1Winners: string[] = [];
+
+    for (let spin = 0; spin < 5; spin++) {
+      const pool = eligibleArcs(fullArcs, excluded);
+      expect(pool.length).toBe(5 - spin);
+      const picked = pickWeighted(pool, (a) => a.segment.weight)!;
+      expect(excluded.has(picked.segment.id)).toBe(false);
+      session1Winners.push(picked.segment.id);
+      excluded.add(picked.segment.id);
+    }
+
+    // All 5 unique options occurred once in Session 1
+    expect(new Set(session1Winners).size).toBe(5);
+    expect(eligibleArcs(fullArcs, excluded).length).toBe(0);
+
+    // Session 2 starts: clear exclusions, all 5 options are eligible again
+    excluded.clear();
+    expect(eligibleArcs(fullArcs, excluded).length).toBe(5);
+  });
+
+  it('completely hides selected options from wheel arcs when hideSelected is active', () => {
+    const segs = ['1', '2', '3', '4', '5'].map((id) => makeSeg(id));
+    const hidden = new Set<string>(['2', '4']);
+    const arcs = computeArcs(segs, false, hidden);
+
+    expect(arcs.length).toBe(3);
+    expect(arcs.map((a) => a.segment.id)).toEqual(['1', '3', '5']);
+    expect(arcs[0].end - arcs[0].start).toBeCloseTo(120);
   });
 });
 

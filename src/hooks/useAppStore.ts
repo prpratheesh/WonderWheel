@@ -33,7 +33,7 @@ import {
 } from '../services/persistence';
 import { requestPersistentStorage } from '../services/db';
 import type { AppSettings, Prefs } from '../types/settings';
-import type { WheelConfig } from '../types/wheel';
+import type { ResultSettings, WheelConfig } from '../types/wheel';
 import { debounce, deepClone, uid } from '../utils/misc';
 
 import { decompressWheelFromShare } from '../services/shareService';
@@ -76,6 +76,7 @@ export function useAppStore() {
   );
 
   const [excludedIds, setExcludedIds] = useState<Set<string>>(() => new Set());
+  const [sessionRound, setSessionRound] = useState<number>(1);
   const [history, setHistory] = useState<SpinHistoryItem[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -282,6 +283,7 @@ export function useAppStore() {
       setIsDirty(false);
       setPreviewingDraft(false);
       setExcludedIds(new Set());
+      setSessionRound(1);
       setHistory([]);
       updatePrefs({ lastWheelId: found.id });
     },
@@ -299,6 +301,7 @@ export function useAppStore() {
       setIsDirty(false);
       setPreviewingDraft(false);
       setExcludedIds(new Set());
+      setSessionRound(1);
       setHistory([]);
       updatePrefs({ lastWheelId: w.id });
       showToast(`Created "${w.name}"`);
@@ -423,8 +426,42 @@ export function useAppStore() {
 
   const resetExclusions = useCallback(() => {
     setExcludedIds(new Set());
-    showToast('All items restored to the wheel');
+    setSessionRound(1);
+    showToast('Session reset — all options restored');
   }, [showToast]);
+
+  const startNextSession = useCallback(() => {
+    setExcludedIds(new Set());
+    setSessionRound((prev) => {
+      const next = prev + 1;
+      showToast(`Starting Session ${next} — all options restored!`);
+      return next;
+    });
+  }, [showToast]);
+
+  const updateWheelResultSettings = useCallback(
+    async (patch: Partial<ResultSettings>) => {
+      const current = displayedWheel;
+      if (!current) return;
+      const updated: WheelConfig = {
+        ...deepClone(current),
+        updatedAt: Date.now(),
+        result: {
+          ...current.result,
+          ...patch,
+        },
+      };
+      if (previewingDraft) {
+        setDraftState(updated);
+        persistDraftDebounced(updated);
+      } else {
+        await saveWheel(updated);
+        setWheels((list) => list.map((w) => (w.id === updated.id ? updated : w)));
+        setDraftState(deepClone(updated));
+      }
+    },
+    [displayedWheel, persistDraftDebounced, previewingDraft],
+  );
 
   const clearHistory = useCallback(() => setHistory([]), []);
 
@@ -474,8 +511,11 @@ export function useAppStore() {
     effectivePerformanceMode,
     markSlowDevice,
     excludedIds,
+    sessionRound,
     excludeSegment,
     resetExclusions,
+    startNextSession,
+    updateWheelResultSettings,
     history,
     recordWin,
     clearHistory,

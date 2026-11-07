@@ -89,6 +89,7 @@ export function defaultResult(): ResultSettings {
     hideUntilStop: false,
     heading: '🎉 CONGRATULATIONS! 🎉',
     removeWinner: false,
+    hideSelected: false,
     autoCloseSeconds: 0,
   };
 }

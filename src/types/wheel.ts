@@ -60,6 +60,8 @@ export interface ResultSettings {
   heading: string;
   /** Automatically exclude winners from later spins in this session. */
   removeWinner: boolean;
+  /** Completely hide the selected option from the wheel once selected. */
+  hideSelected: boolean;
   /** Auto close popup after N seconds (0 = never). */
   autoCloseSeconds: number;
 }

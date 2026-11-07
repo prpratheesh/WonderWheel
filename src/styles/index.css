@@ -312,7 +312,8 @@ button:focus-visible {
 .wheel-hud__left, .wheel-hud__right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   flex: 1;
 }
 
@@ -364,9 +365,30 @@ button:focus-visible {
   gap: 6px;
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
-.hud-pill--action:hover {
-  background: rgba(255, 255, 255, 0.4);
+.hud-pill--action:hover,
+.hud-pill--toggle:hover {
+  background: rgba(255, 255, 255, 0.38);
   transform: translateY(-1px);
+}
+.hud-pill--toggle {
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+.hud-pill--toggle.is-active {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+}
+
+.session-complete-pill {
+  background: rgba(16, 185, 129, 0.92);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.92rem;
+  padding: 6px 18px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: var(--shadow-md);
 }
 
 .live-banner {

@@ -9,6 +9,8 @@ import {
   ArrowLeft,
   Share2,
   Sparkles,
+  EyeOff,
+  Repeat,
 } from 'lucide-react';
 import { Celebration, type CelebrationBurst } from '../../components/Celebration/Celebration';
 import { FullScreenToggle } from '../../components/FullScreen/FullScreenToggle';
@@ -63,15 +65,39 @@ export const Home: React.FC<HomeProps> = ({
     }
   };
 
-  const arcs = useMemo(
+  const emptySet = useMemo(() => new Set<string>(), []);
+  const noRepeatActive = Boolean(wheel?.result.removeWinner || wheel?.result.hideSelected);
+  const hideSelectedActive = Boolean(wheel?.result.hideSelected);
+
+  const fullArcs = useMemo(
     () => (wheel ? computeArcs(wheel.segments, wheel.design.sizeByWeight) : []),
     [wheel],
+  );
+
+  const arcs = useMemo(
+    () =>
+      wheel
+        ? computeArcs(
+            wheel.segments,
+            wheel.design.sizeByWeight,
+            hideSelectedActive ? store.excludedIds : undefined,
+          )
+        : [],
+    [wheel, hideSelectedActive, store.excludedIds],
+  );
+
+  const totalSessionEligible = useMemo(
+    () => eligibleArcs(fullArcs, emptySet),
+    [fullArcs, emptySet],
   );
 
   const eligible = useMemo(
     () => eligibleArcs(arcs, store.excludedIds),
     [arcs, store.excludedIds],
   );
+
+  const isSessionComplete =
+    totalSessionEligible.length > 0 && eligible.length === 0 && store.excludedIds.size > 0;
 
   const handleWin = useCallback(
     (segment: Segment, _arc: SegmentArc) => {
@@ -80,7 +106,7 @@ export const Home: React.FC<HomeProps> = ({
       if (wheel.result.showPopup) {
         setPopupWinner(segment);
       }
-      store.recordWin(segment, wheel.result.removeWinner);
+      store.recordWin(segment, wheel.result.removeWinner || wheel.result.hideSelected);
       sound.win();
       const fx = wheel.animation.effects;
       if (fx.confetti || fx.fireworks || fx.stars || fx.sparkles) {
@@ -128,21 +154,50 @@ export const Home: React.FC<HomeProps> = ({
 
   const triggerSpin = useCallback(() => {
     setPopupWinner(null);
-    anim.startSpin();
-  }, [anim]);
+    if (isSessionComplete && fullArcs.length > 0) {
+      store.startNextSession();
+      anim.startSpin(fullArcs, emptySet);
+    } else {
+      anim.startSpin();
+    }
+  }, [anim, emptySet, fullArcs, isSessionComplete, store]);
 
   const handleSpinAgain = useCallback(() => {
     setPopupWinner(null);
-    setTimeout(() => anim.startSpin(), 40);
-  }, [anim]);
+    setTimeout(() => {
+      if (isSessionComplete && fullArcs.length > 0) {
+        store.startNextSession();
+        anim.startSpin(fullArcs, emptySet);
+      } else {
+        anim.startSpin();
+      }
+    }, 40);
+  }, [anim, emptySet, fullArcs, isSessionComplete, store]);
 
   const handleNextSelection = useCallback(() => {
+    const nextExcluded = new Set(store.excludedIds);
     if (popupWinner) {
       store.excludeSegment(popupWinner.id);
+      nextExcluded.add(popupWinner.id);
     }
     setPopupWinner(null);
-    setTimeout(() => anim.startSpin(), 50);
-  }, [anim, popupWinner, store]);
+    setTimeout(() => {
+      const nextArcs = wheel
+        ? computeArcs(
+            wheel.segments,
+            wheel.design.sizeByWeight,
+            hideSelectedActive ? nextExcluded : undefined,
+          )
+        : [];
+      const nextPool = eligibleArcs(nextArcs, nextExcluded);
+      if (nextPool.length === 0 && fullArcs.length > 0) {
+        store.startNextSession();
+        anim.startSpin(fullArcs, emptySet);
+      } else {
+        anim.startSpin(nextArcs, nextExcluded);
+      }
+    }, 50);
+  }, [anim, emptySet, fullArcs, hideSelectedActive, popupWinner, store, wheel]);
 
   // Classroom keyboard shortcuts: Space, R, M, Escape
   useEffect(() => {
@@ -154,14 +209,12 @@ export const Home: React.FC<HomeProps> = ({
         if (anim.phase === 'freeSpin') {
           anim.stopManualSpin();
         } else if (anim.phase === 'idle') {
-          setPopupWinner(null);
-          anim.startSpin();
+          triggerSpin();
         }
       } else if (e.key === 'r' || e.key === 'R') {
         if (anim.phase === 'idle') {
           e.preventDefault();
-          setPopupWinner(null);
-          anim.startSpin();
+          triggerSpin();
         }
       } else if (e.key === 'm' || e.key === 'M') {
         e.preventDefault();
@@ -176,7 +229,7 @@ export const Home: React.FC<HomeProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [anim, isFullScreen, onExitFullScreen, popupWinner, store]);
+  }, [anim, isFullScreen, onExitFullScreen, popupWinner, store, triggerSpin]);
 
   const bgImageUrl = useImageUrl(
     wheel?.design.background.type === 'image' ? wheel.design.background.imageId : null,
@@ -255,16 +308,58 @@ export const Home: React.FC<HomeProps> = ({
             <div className="fullscreen-wheel-title">{wheel.name}</div>
           )}
 
-          {store.excludedIds.size > 0 && (
+          <button
+            type="button"
+            className={`hud-pill hud-pill--toggle ${noRepeatActive ? 'is-active' : ''}`}
+            onClick={() => {
+              const next = !noRepeatActive;
+              void store.updateWheelResultSettings({
+                removeWinner: next,
+                hideSelected: next ? wheel.result.hideSelected : false,
+              });
+              store.showToast(
+                next
+                  ? 'No-Repeat enabled: options will not repeat in the same session'
+                  : 'No-Repeat disabled: all options can appear on every spin',
+              );
+            }}
+            title="Do not repeat answers which already occurred once until the next session"
+          >
+            <Repeat size={14} />
+            <span>No Repeat: {noRepeatActive ? 'ON' : 'OFF'}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`hud-pill hud-pill--toggle ${hideSelectedActive ? 'is-active' : ''}`}
+            onClick={() => {
+              const next = !hideSelectedActive;
+              void store.updateWheelResultSettings({
+                hideSelected: next,
+                removeWinner: next ? true : wheel.result.removeWinner,
+              });
+              store.showToast(
+                next
+                  ? 'Hide Selected enabled: selected options are completely hidden until next session'
+                  : 'Hide Selected disabled: selected options remain visible on the wheel',
+              );
+            }}
+            title="Completely hide the selected option from the wheel once selected"
+          >
+            <EyeOff size={14} />
+            <span>Hide Selected: {hideSelectedActive ? 'ON' : 'OFF'}</span>
+          </button>
+
+          {(noRepeatActive || store.excludedIds.size > 0) && (
             <button
               type="button"
               className="hud-pill hud-pill--action"
               onClick={store.resetExclusions}
-              title="Restore all excluded winners back onto the wheel"
+              title="Click to reset session and restore all options immediately"
             >
               <RotateCcw size={14} />
               <span>
-                Restore {store.excludedIds.size} picked
+                Session #{store.sessionRound} ({eligible.length}/{totalSessionEligible.length} left)
               </span>
             </button>
           )}
@@ -332,10 +427,10 @@ export const Home: React.FC<HomeProps> = ({
       {/* Main Wheel Center Stage */}
       <div className="wheel-center-area">
         <Wheel
-          arcs={arcs}
+          arcs={isSessionComplete && hideSelectedActive ? fullArcs : arcs}
           design={wheel.design}
           dimmedIds={store.excludedIds}
-          winningArc={anim.winningArc}
+          winningArc={hideSelectedActive ? null : anim.winningArc}
           glowWinner={wheel.animation.effects.glow}
           vibrateOnWin={wheel.animation.effects.vibration && !store.effectiveReducedMotion}
           phase={anim.phase}
@@ -352,27 +447,20 @@ export const Home: React.FC<HomeProps> = ({
 
       {/* Bottom control dock */}
       <div className="wheel-dock">
-        {eligible.length === 0 ? (
-          <div className="empty-pool-card">
-            <span>All partitions have been selected in this round!</span>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={store.resetExclusions}
-            >
-              <RotateCcw size={18} />
-              <span>Restore All & Spin Again</span>
-            </button>
+        {isSessionComplete && anim.phase === 'idle' && (
+          <div className="session-complete-pill">
+            <span>
+              🎉 Session #{store.sessionRound} complete! All {totalSessionEligible.length} options occurred once. Next spin starts Session #{store.sessionRound + 1}!
+            </span>
           </div>
-        ) : (
-          <SpinButton
-            phase={anim.phase}
-            spinMode={wheel.animation.spinMode}
-            disabled={eligible.length === 0}
-            onSpin={triggerSpin}
-            onStop={anim.stopManualSpin}
-          />
         )}
+        <SpinButton
+          phase={anim.phase}
+          spinMode={wheel.animation.spinMode}
+          disabled={totalSessionEligible.length === 0}
+          onSpin={triggerSpin}
+          onStop={anim.stopManualSpin}
+        />
 
         {lastSelected && anim.phase === 'idle' && (
           <button
